@@ -64,7 +64,9 @@ func (p *PubSubChainExchange) Start(ctx context.Context) error {
 	}
 	if p.topicScoreParams != nil {
 		if err := p.topic.SetScoreParams(p.topicScoreParams); err != nil {
-			return fmt.Errorf("failed to set score params: %w", err)
+			// This can happen most likely due to router not supporting peer scoring. It's
+			// non-critical. Hence, the warning log.
+			log.Warnw("failed to set topic score params", "err", err)
 		}
 	}
 	subscription, err := p.topic.Subscribe(pubsub.WithBufferSize(p.subscriptionBufferSize))
@@ -79,7 +81,7 @@ func (p *PubSubChainExchange) Start(ctx context.Context) error {
 		for ctx.Err() == nil {
 			msg, err := subscription.Next(ctx)
 			if err != nil {
-				log.Debugw("failed to read nex message from subscription", "err", err)
+				log.Debugw("failed to read next message from subscription", "err", err)
 				continue
 			}
 			cmsg := msg.ValidatorData.(Message)
@@ -89,7 +91,9 @@ func (p *PubSubChainExchange) Start(ctx context.Context) error {
 	p.stop = func() error {
 		cancel()
 		subscription.Cancel()
-		return p.topic.Close()
+		_ = p.pubsub.UnregisterTopicValidator(p.topicName)
+		_ = p.topic.Close()
+		return nil
 	}
 	return nil
 }
